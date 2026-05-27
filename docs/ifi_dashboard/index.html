@@ -218,7 +218,7 @@
           <section class="chart-section">
             <div class="section-head">
               <h3>Monthly Seasonality by Cause</h3>
-              <span>Row share</span>
+              <span>Row share, n shown</span>
             </div>
             <div class="heatmap" id="monthlyHeatmap"></div>
           </section>
@@ -249,7 +249,7 @@
           <section class="chart-section">
             <div class="section-head">
               <h3>State Cause Composition</h3>
-              <span>Top states by mapped events</span>
+              <span>Top states by event-district records</span>
             </div>
             <canvas id="stateCauseChart" height="430"></canvas>
           </section>
@@ -257,7 +257,7 @@
           <section class="table-section">
             <div class="section-head">
               <h3>State Ranking</h3>
-              <span>Mapped events</span>
+              <span>Event-district records</span>
             </div>
             <div class="table-wrap tall">
               <table>
@@ -298,6 +298,25 @@
                   </tr>
                 </thead>
                 <tbody id="metricTable"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="table-section">
+            <div class="section-head">
+              <h3>Methodology</h3>
+              <span>How the toolbox computes dashboard values</span>
+            </div>
+            <div class="table-wrap methodology-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Component</th>
+                    <th>Computation</th>
+                    <th>How to read it</th>
+                  </tr>
+                </thead>
+                <tbody id="methodTable"></tbody>
               </table>
             </div>
           </section>

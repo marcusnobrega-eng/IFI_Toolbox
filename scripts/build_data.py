@@ -13,11 +13,18 @@ import numpy as np
 import pandas as pd
 
 
-ROOT = Path(__file__).resolve().parents[3]
+def find_repo_root() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "Districts_Shapefile" / "GADM41_IND2_Districts.shp").exists():
+            return parent
+    raise FileNotFoundError("Could not locate IFI_Toolbox repository root from build_data.py")
+
+
+ROOT = find_repo_root()
 APP_DIR = Path(__file__).resolve().parents[1]
 OUT_DIR = APP_DIR / "data"
 
-WORKBOOK = ROOT / "India_Flood_Inventory_v7_corrected_combined_exploded_added_numericalMetrics.xlsx"
+SOURCE_DATA = ROOT / "India_Flood_Inventory_v7_corrected_combined_exploded_added_numericalMetrics.xlsx"
 DISTRICT_SHP = ROOT / "Districts_Shapefile" / "GADM41_IND2_Districts.shp"
 
 MIN_SCORED_EVENTS = 3
@@ -366,7 +373,15 @@ def prepare_event_district(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     location_col = find_column(df, ["Location", "location"])
     source_col = find_column(df, ["Event Source", "Event_Source", "source"])
     severity_col = find_column(df, ["Severity", "severity"])
-    match_valid_col = find_column(df, ["gadm_match_valid_for_metric_v7", "gadm_match_valid_for_metric_v6", "gadm_match_valid_for_metric"])
+    match_valid_col = find_column(
+        df,
+        [
+            "gadm_match_valid_for_metric_v7",
+            "gadm_match_valid_for_metric_v6",
+            "gadm_match_valid_for_metric_v5",
+            "gadm_match_valid_for_metric",
+        ],
+    )
 
     gids = df[gid_col].astype(str).str.strip()
     valid = gids.notna() & (gids != "") & (gids.str.lower() != "nan")
@@ -553,17 +568,21 @@ def build_state_summary(summary: pd.DataFrame, event_district: pd.DataFrame) -> 
     state = state_shell.merge(state, left_index=True, right_index=True, how="left").fillna({"n_events": 0, "n_event_district_records": 0})
 
     cause_counts = (
-        event_district.groupby(["_state_name", "_cause"])["_event_id"]
-        .nunique()
-        .rename("n_events")
+        event_district.groupby(["_state_name", "_cause"])
+        .size()
+        .rename("n_event_district_records")
         .reset_index()
     )
     cause_lookup = {}
     for state_name, chunk in cause_counts.groupby("_state_name"):
-        ordered = chunk.sort_values("n_events", ascending=False)
-        total = ordered["n_events"].sum()
+        ordered = chunk.sort_values("n_event_district_records", ascending=False)
+        total = ordered["n_event_district_records"].sum()
         cause_lookup[state_name] = {
-            row["_cause"]: {"events": int(row["n_events"]), "share": finite_or_none(row["n_events"] / total, 4)}
+            row["_cause"]: {
+                "records": int(row["n_event_district_records"]),
+                "events": int(row["n_event_district_records"]),
+                "share": finite_or_none(row["n_event_district_records"] / total, 4),
+            }
             for _, row in ordered.iterrows()
             if total > 0
         }
@@ -572,7 +591,7 @@ def build_state_summary(summary: pd.DataFrame, event_district: pd.DataFrame) -> 
     for state_name, row in state.reset_index().rename(columns={"index": "state"}).iterrows():
         name = row["state"]
         cause_obj = cause_lookup.get(name, {})
-        dominant = max(cause_obj.items(), key=lambda item: item[1]["events"])[0] if cause_obj else "No IFI record"
+        dominant = max(cause_obj.items(), key=lambda item: item[1]["records"])[0] if cause_obj else "No IFI record"
         item = {
             "state": name,
             "districts": int(row["districts"]),
@@ -600,7 +619,7 @@ def build_state_summary(summary: pd.DataFrame, event_district: pd.DataFrame) -> 
                 2,
             )
         out.append(item)
-    return sorted(out, key=lambda x: (x["n_events"], x["n_event_district_records"]), reverse=True)
+    return sorted(out, key=lambda x: (x["n_event_district_records"], x["n_events"]), reverse=True)
 
 
 def build_cause_summary(event_district: pd.DataFrame) -> list[dict]:
@@ -642,15 +661,24 @@ def build_monthly_summary(event_district: pd.DataFrame) -> dict:
 
     counts = []
     percentages = []
+    totals_by_cause = []
     for cause in causes:
         row = []
         for month in range(1, 13):
             value = monthly.loc[(monthly["_cause"] == cause) & (monthly["_month"] == month), "records"].sum()
             row.append(int(value))
         total = sum(row)
+        totals_by_cause.append(total)
         counts.append(row)
         percentages.append([round((value / total) * 100, 2) if total else 0 for value in row])
-    return {"months": MONTH_NAMES, "causes": causes, "counts": counts, "percentages": percentages}
+    return {
+        "months": MONTH_NAMES,
+        "causes": causes,
+        "cause_totals": totals_by_cause,
+        "counts": counts,
+        "percentages": percentages,
+        "note": "Rows show monthly share within each cause group. Small cause totals can produce large percentages from few records.",
+    }
 
 
 def build_yearly_summary(event_unique: pd.DataFrame, event_district: pd.DataFrame) -> list[dict]:
@@ -885,12 +913,20 @@ def write_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, ensure_ascii=True, allow_nan=False, separators=(",", ":")), encoding="utf-8")
 
 
+def read_source_data(path: Path) -> pd.DataFrame:
+    if path.suffix.lower() == ".csv":
+        return pd.read_csv(path, low_memory=False)
+    if path.suffix.lower() in [".xlsx", ".xls"]:
+        return pd.read_excel(path, sheet_name="in")
+    raise ValueError(f"Unsupported source data format: {path}")
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    print(f"Reading workbook: {WORKBOOK}")
-    df = pd.read_excel(WORKBOOK, sheet_name="in")
-    print(f"Workbook rows: {len(df):,}; columns: {len(df.columns):,}")
+    print(f"Reading source data: {SOURCE_DATA}")
+    df = read_source_data(SOURCE_DATA)
+    print(f"Source rows: {len(df):,}; columns: {len(df.columns):,}")
 
     print(f"Reading district shapefile: {DISTRICT_SHP}")
     districts = gpd.read_file(DISTRICT_SHP)
@@ -994,10 +1030,74 @@ def main() -> None:
         },
     ]
 
+    methodology = [
+        {
+            "component": "Source records",
+            "method": "The dashboard reads the v7 India Flood Inventory workbook and uses the event-district exploded records that contain a valid GADM district identifier.",
+            "interpretation": "Each row represents one event linked to one district, so multi-district events can appear once per affected district.",
+        },
+        {
+            "component": "Record de-duplication",
+            "method": "Records are filtered with the source GADM match-valid flag when present, then duplicate district-event pairs are removed using GID_2 and the event identifier.",
+            "interpretation": "District, state, and cause summaries are based on unique event-district records rather than repeated source rows.",
+        },
+        {
+            "component": "District event frequency",
+            "method": "Frequency is the count of unique IFI events mapped to each district after the validity and de-duplication steps.",
+            "interpretation": "This is a district exposure-to-recorded-events measure, not a count of newspaper articles or raw database rows.",
+        },
+        {
+            "component": "Hazard metric",
+            "method": "The source-provided IFI flood hazard score is read from the v7 hazard-score field. The dashboard reports the district 95th percentile of scored event records, and only classifies hazard where at least three scored events are available.",
+            "interpretation": "P95 hazard is a high-end severity indicator on a 0-100 scale; districts with too few scored events are treated as insufficient evidence for hazard-class mapping.",
+        },
+        {
+            "component": "Hotspot class",
+            "method": "Districts with events and sufficient scored records are split into low, medium, and high tertiles for event frequency and P95 hazard, then combined into a 3 by 3 frequency-severity class.",
+            "interpretation": "The hotspot layer highlights whether a district is high because floods are frequent, severe, or both.",
+        },
+        {
+            "component": "Planning priority score",
+            "method": "Priority is 100 x (0.42 x event-frequency percentile + 0.38 x P95 hazard/100 + 0.20 x fatality percentile). Fatalities use apportioned district totals, and districts without mapped events receive zero.",
+            "interpretation": "The score ranks districts for screening and planning attention; it is a composite decision-support index, not a probability forecast.",
+        },
+        {
+            "component": "Flood-cause classes",
+            "method": "Cause groups are taken from the classified cause field in the inventory and harmonized into the dashboard labels used in maps, charts, and tables.",
+            "interpretation": "Cause charts describe classified event-district records, so the same event may contribute to multiple districts if it affected a broader area.",
+        },
+        {
+            "component": "Monthly seasonality",
+            "method": "Monthly tables group event-district records by start month and cause. Values are row-normalized percentages within each cause, and the row label shows the cause total as n.",
+            "interpretation": "Each row answers: within this cause group, what share of records begin in each month?",
+        },
+        {
+            "component": "Impact rollups",
+            "method": "Event-level fatalities, displaced people, crop area, and losses are apportioned equally across affected districts before district and state totals are calculated.",
+            "interpretation": "Apportionment avoids multiplying national impacts when one event touches several districts.",
+        },
+        {
+            "component": "Units and currency",
+            "method": f"Area is shown as square kilometres, crop area is converted from hectares to km2, and monetary loss is converted from INR lakh to 2026 USD using 1 USD = INR {USD_INR_2026}.",
+            "interpretation": "Displayed values use SI or SI-derived units and a consistent 2026 USD monetary basis.",
+        },
+        {
+            "component": "Sanity flags",
+            "method": "Reported impact values marked by source sanity-cap flags are excluded from dashboard rollups before apportionment.",
+            "interpretation": "This keeps extreme or flagged source values from dominating decision-support summaries.",
+        },
+        {
+            "component": "CSV export",
+            "method": "The export button writes the currently filtered district-level metrics, including the selected map score, impact fields, and ranking indicators.",
+            "interpretation": "Exports are intended for quick screening and follow-up analysis outside the dashboard.",
+        },
+    ]
+
     analytics = {
         "metadata": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "workbook": WORKBOOK.name,
+            "workbook": SOURCE_DATA.name,
+            "source_data": SOURCE_DATA.name,
             "district_shapefile": str(DISTRICT_SHP.relative_to(ROOT)),
             "min_scored_events_for_hazard": MIN_SCORED_EVENTS,
             "unit_note": "Dashboard display units use SI or SI-derived units where applicable: km2 for area, km for length, m/mm for depths and rainfall, and 2026 USD for money.",
@@ -1018,6 +1118,7 @@ def main() -> None:
                 },
             ],
             "columns_used": columns_used,
+            "methodology": methodology,
         },
         "totals": totals,
         "metrics": metrics,
