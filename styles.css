@@ -599,7 +599,7 @@ input[type="number"]:focus {
 }
 
 .chart-section {
-  overflow: hidden;
+  overflow: auto;
 }
 
 .chart-section canvas {
@@ -643,6 +643,16 @@ input[type="number"]:focus {
   max-height: 420px;
 }
 
+.methodology-wrap table {
+  min-width: 860px;
+}
+
+.methodology-wrap th:first-child,
+.methodology-wrap td:first-child {
+  width: 150px;
+  font-weight: 850;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -679,7 +689,8 @@ td.numeric {
 
 .heatmap {
   display: grid;
-  grid-template-columns: minmax(112px, 1.2fr) repeat(12, minmax(27px, 1fr));
+  grid-template-columns: minmax(170px, 1.5fr) repeat(12, minmax(46px, 1fr));
+  min-width: 760px;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
@@ -697,11 +708,25 @@ td.numeric {
 }
 
 .heatmap .heat-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: start;
   padding: 0 8px;
   color: var(--muted);
   font-weight: 800;
   text-align: left;
+}
+
+.heatmap .heat-label strong {
+  color: var(--muted);
+}
+
+.heatmap .heat-label small {
+  margin-top: 2px;
+  color: var(--subtle);
+  font-size: 10px;
+  font-weight: 750;
 }
 
 .heatmap .heat-head {

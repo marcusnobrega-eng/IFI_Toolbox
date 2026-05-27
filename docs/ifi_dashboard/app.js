@@ -755,11 +755,15 @@ function renderMonthlyHeatmap() {
     html += `<div class="heat-head">${escapeHtml(month)}</div>`;
   });
   data.causes.forEach((cause, rowIndex) => {
-    html += `<div class="heat-label">${escapeHtml(cause)}</div>`;
-    data.percentages[rowIndex].forEach((value) => {
+    const total = data.cause_totals?.[rowIndex];
+    const totalText = total === undefined ? '' : `<small>n=${fmt(total)}</small>`;
+    html += `<div class="heat-label"><strong>${escapeHtml(cause)}</strong>${totalText}</div>`;
+    data.percentages[rowIndex].forEach((value, colIndex) => {
       const background = heatColor(value, maxValue);
       const color = value / maxValue > 0.62 ? '#ffffff' : '#12211d';
-      html += `<div style="background:${background};color:${color}">${value > 0 ? fmt(value, 0) : ''}</div>`;
+      const count = data.counts?.[rowIndex]?.[colIndex];
+      const title = count === undefined ? '' : ` title="${escapeHtml(cause)}: ${fmt(count)} records"`;
+      html += `<div${title} style="background:${background};color:${color}">${value > 0 ? fmt(value, 0) : ''}</div>`;
     });
   });
   wrap.innerHTML = html;
@@ -790,8 +794,8 @@ function renderStatesPanel() {
   const datasets = causes.map((cause) => ({
     label: cause,
     data: states.map((state) => {
-      const total = Object.values(state.cause_counts || {}).reduce((sum, item) => sum + item.events, 0);
-      const value = state.cause_counts?.[cause]?.events || 0;
+      const total = Object.values(state.cause_counts || {}).reduce((sum, item) => sum + (item.records ?? item.events ?? 0), 0);
+      const value = state.cause_counts?.[cause]?.records ?? state.cause_counts?.[cause]?.events ?? 0;
       return total ? (value / total) * 100 : 0;
     }),
     backgroundColor: appState.analytics.cause_palette[cause] || '#9aa4ad',
@@ -824,7 +828,7 @@ function renderStatesPanel() {
     <tr>
       <td>${escapeHtml(row.state)}</td>
       <td class="numeric">${fmt(row.districts_with_records)}/${fmt(row.districts)}</td>
-      <td class="numeric">${fmt(row.n_events)}</td>
+      <td class="numeric">${fmt(row.n_event_district_records)}</td>
       <td class="numeric">${fmt(row.p95_hazard_score, 1)}</td>
       <td>${escapeHtml(row.dominant_cause)}</td>
     </tr>
@@ -850,6 +854,14 @@ function renderDataPanel() {
       <td>${escapeHtml(metric.label)}</td>
       <td>${escapeHtml(metric.unit)}</td>
       <td>${escapeHtml(metric.description)}</td>
+    </tr>
+  `).join('');
+
+  byId('methodTable').innerHTML = (meta.methodology || []).map((item) => `
+    <tr>
+      <td>${escapeHtml(item.component)}</td>
+      <td>${escapeHtml(item.method)}</td>
+      <td>${escapeHtml(item.interpretation)}</td>
     </tr>
   `).join('');
 
