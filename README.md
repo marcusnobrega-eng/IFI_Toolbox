@@ -11,7 +11,6 @@
   <img alt="Package" src="https://img.shields.io/badge/toolbox-IFI-2b9348.svg">
   <img alt="Status" src="https://img.shields.io/badge/status-research%20toolbox-orange.svg">
   <img alt="Focus" src="https://img.shields.io/badge/focus-India%20%7C%20floods%20%7C%20districts-0f766e.svg">
-  <img alt="License" src="https://img.shields.io/badge/license-TBD-lightgrey.svg">
 </p>
 
 <p align="center">
